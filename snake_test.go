@@ -19,8 +19,9 @@ func TestBodyCollision(t *testing.T) {
 		return
 	}
 	G.WalkDown()
-	if G.IsOver() {
-		t.Log("ok")
+	if !G.IsOver() {
+		t.Error("step 3 should collision")
+		return
 	}
 }
 
@@ -34,8 +35,9 @@ func TestWallCollision(t *testing.T) {
 		}
 	}
 	G.WalkRight()
-	if G.IsOver() {
-		t.Log("ok")
+	if !G.IsOver() {
+		t.Error("step 50 should collision")
+		return
 	}
 }
 
@@ -50,8 +52,8 @@ func TestEatFood(t *testing.T) {
 			t.Errorf("step %d should not game over", i+1)
 			return
 		}
-		if G.Snake.Len != initLen {
-			t.Errorf("step %d: error snake Len(%d)", i+1, G.Snake.Len)
+		if G.World.Snake.Len != initLen {
+			t.Errorf("step %d: error snake Len(%d)", i+1, G.World.Snake.Len)
 			return
 		}
 	}
@@ -60,8 +62,8 @@ func TestEatFood(t *testing.T) {
 		t.Errorf("step %d shodld not over", 3)
 		return
 	}
-	if G.Snake.Len != initLen {
-		t.Errorf("step %d: error snake Len(%d)", 3, G.Snake.Len)
+	if G.World.Snake.Len != initLen {
+		t.Errorf("step %d: error snake Len(%d)", 3, G.World.Snake.Len)
 		return
 	}
 	G.WalkDown()
@@ -69,13 +71,13 @@ func TestEatFood(t *testing.T) {
 		t.Errorf("step %d shodld not over", 4)
 		return
 	}
-	if G.Snake.Len == initLen {
-		t.Errorf("step %d: snake Len should be %d", 4, G.Snake.Len+1)
+	if G.World.Snake.Len == initLen {
+		t.Errorf("step %d: snake Len should be %d", 4, G.World.Snake.Len+1)
 		return
 	}
 
 	// check new food target
-	if G.Food.X == initFoodX && G.Food.Y == initFoodY {
+	if G.World.Food.X == initFoodX && G.World.Food.Y == initFoodY {
 		t.Error("new target not yet generated")
 		return
 	}

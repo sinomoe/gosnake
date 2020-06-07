@@ -5,101 +5,142 @@ import (
 	"time"
 )
 
+var (
+	DefaultWallGenerator WallGenerator
+	DefaultConfig        GameConfig
+)
+
 func init() {
 	rand.Seed(time.Now().Unix())
+	DefaultWallGenerator = func(w World) Wall {
+		return func(c Coordinates) bool {
+			if c.x <= 0 || c.y <= 0 || c.x >= w.XLen || c.y >= w.YLen {
+				return true
+			}
+			return false
+		}
+	}
 	DefaultConfig = GameConfig{
 		XLen: 100,
 		YLen: 100,
-		XOff: 0,
-		YOff: 0,
 		BabySnake: Snake{
-			Bodies: []Body{{48, 50}, {49, 50}, {50, 50}},
-			Len:    3,
+			Bodies: []Body{{46, 50}, {47, 50}, {48, 50}, {49, 50}, {50, 50}},
+			Len:    5,
 		},
-		InitFood: Food{X: 52, Y: 52},
+		InitFood:      Food{X: 52, Y: 52},
+		WallGenerator: DefaultWallGenerator,
 	}
 }
 
-type World struct {
-	XLen, YLen       int
-	XOffset, YOffset int
+type Coordinates struct {
+	x, y int
 }
 
-func (w World) CheckWallCollision(s Snake) (ok bool) {
-	LX := w.XOffset
-	RX := w.XLen + w.XOffset
-	TY := w.YOffset
-	BY := w.YLen + w.YOffset
-
-	head := s.Bodies[s.Len-1]
-	if head.X <= LX || head.X >= RX || head.Y >= BY || head.Y <= TY {
-		return false
-	}
-	return true
+func (c Coordinates) Equal(co Coordinates) bool {
+	return c.x == co.x && c.y == co.y
 }
+
+type direction int
+
+const (
+	up direction = iota + 1
+	down
+	left
+	right
+)
 
 type Body struct {
 	X, Y int
 }
 
-type Snake struct {
-	Bodies []Body
-	Len    int
+func (b Body) Coordinates() Coordinates {
+	return Coordinates{
+		x: b.X,
+		y: b.Y,
+	}
 }
 
-// assume snake is not too long
-func (s Snake) isOnSnake(X, Y int) bool {
-	for _, b := range s.Bodies {
-		if b.X == X && b.Y == Y {
+type Bodies []Body
+
+func (bs Bodies) head() Body {
+	return bs[len(bs)-1]
+}
+func (bs Bodies) any(f func(b Body) bool) (existed bool) {
+	for _, b := range bs {
+		if exist := f(b); exist {
 			return true
 		}
 	}
 	return false
 }
-
-func (s Snake) CheckBodyCollision() (ok bool) {
-	head := s.Bodies[s.Len-1]
-	for i := 0; i < s.Len-2; i++ {
-		body := s.Bodies[i]
-		if body.X == head.X && body.Y == head.Y {
-			return false
+func (bs Bodies) match(f func(b Body) bool) (matched int) {
+	matched = 0
+	for _, b := range bs {
+		if exist := f(b); exist {
+			matched++
 		}
 	}
-	return true
+	return matched
+}
+func (bs *Bodies) appendHead(b Body) {
+	*bs = append(*bs, b)
+}
+func (bs *Bodies) shiftTail() {
+	*bs = (*bs)[1:]
 }
 
-type Direction int
+type Snake struct {
+	Bodies    Bodies
+	Len       int
+	Direction direction
+}
 
-const (
-	Up Direction = iota
-	Down
-	Left
-	Right
-)
+func (s Snake) Head() Body {
+	return s.Bodies.head()
+}
+
+// assume snake is not too long
+func (s Snake) onSnake(c Coordinates) bool {
+	existed := s.Bodies.any(func(b Body) bool {
+		return b.Coordinates().Equal(c)
+	})
+	return existed
+}
+func (s Snake) detectBodyCollision() (detected bool) {
+	head := s.Head()
+	matched := s.Bodies.match(func(b Body) bool {
+		return b.Coordinates().Equal(head.Coordinates())
+	})
+	if matched >= 2 {
+		return true
+	}
+	return false
+}
 
 func (s *Snake) appendHead(b Body) {
-	s.Bodies = append(s.Bodies, b)
+	s.Bodies.appendHead(b)
 }
 func (s *Snake) shiftTail() {
-	s.Bodies = s.Bodies[1:]
+	s.Bodies.shiftTail()
 }
-func (s *Snake) Walk(G *Game, direction Direction) {
-	head := s.Bodies[s.Len-1]
+func (s *Snake) walk(w *World, direction direction) {
+	s.Direction = direction
+	head := s.Head()
 	newHead := head
 	switch direction {
-	case Up:
+	case up:
 		newHead.Y--
-	case Down:
+	case down:
 		newHead.Y++
-	case Left:
+	case left:
 		newHead.X--
-	case Right:
+	case right:
 		newHead.X++
 	}
 	s.appendHead(newHead)
-	if G.Food.X == newHead.X && G.Food.Y == newHead.Y {
+	if w.Food.Coordinates().Equal(newHead.Coordinates()) {
 		s.Len++ // eat food
-		G.RefreshFood()
+		w.RefreshFood()
 		return
 	}
 	s.shiftTail()
@@ -109,75 +150,96 @@ type Food struct {
 	X, Y int
 }
 
-type Game struct {
-	World  World
-	Food   Food
-	Snake  Snake
-	isOver bool
-}
-
-type GameConfig struct {
-	XLen, YLen, XOff, YOff int
-	BabySnake              Snake
-	InitFood               Food
-}
-
-var DefaultConfig GameConfig
-
-func GameInit(c GameConfig) *Game {
-	world := World{
-		XLen:    c.XLen,
-		YLen:    c.YLen,
-		XOffset: c.XOff,
-		YOffset: c.YOff,
-	}
-	snake := c.BabySnake
-	food := c.InitFood
-
-	return &Game{
-		World:  world,
-		Snake:  snake,
-		Food:   food,
-		isOver: false,
+func (f Food) Coordinates() Coordinates {
+	return Coordinates{
+		x: f.X,
+		y: f.Y,
 	}
 }
-func (G *Game) RefreshFood() {
-	X := rand.Intn(G.World.XLen-2) + G.World.XOffset + 1
-	Y := rand.Intn(G.World.YLen-2) + G.World.YOffset + 1
-	for G.Snake.isOnSnake(X, Y) {
-		X = rand.Intn(G.World.XLen-2) + G.World.XOffset + 1
-		Y = rand.Intn(G.World.YLen-2) + G.World.YOffset + 1
+
+type WallGenerator func(w World) Wall
+type Wall func(c Coordinates) bool
+
+func (wa Wall) onWall(c Coordinates) bool {
+	return wa(c)
+}
+
+type World struct {
+	XLen, YLen int
+	Snake      Snake
+	Food       Food
+	wall       Wall
+}
+
+func (w World) detectWallCollision() (detected bool) {
+	head := w.Snake.Head()
+	return w.wall.onWall(head.Coordinates())
+}
+func (w World) detectCollision() (detected bool) {
+	return w.detectWallCollision() || w.Snake.detectBodyCollision()
+}
+func (w *World) RefreshFood() {
+	X := rand.Intn(w.XLen - 1)
+	Y := rand.Intn(w.YLen - 1)
+	for w.Snake.onSnake(Coordinates{X, Y}) || w.wall.onWall(Coordinates{X, Y}) {
+		X = rand.Intn(w.XLen - 1)
+		Y = rand.Intn(w.YLen - 1)
 	}
-	G.Food = Food{
+	w.Food = Food{
 		X: X,
 		Y: Y,
 	}
 }
-func (G *Game) CheckCollision() (ok bool) {
-	return G.World.CheckWallCollision(G.Snake) && G.Snake.CheckBodyCollision()
+
+type Game struct {
+	World  World
+	isOver bool
 }
+
+type GameConfig struct {
+	XLen, YLen    int
+	BabySnake     Snake
+	InitFood      Food
+	WallGenerator WallGenerator
+}
+
+func GameInit(c GameConfig) *Game {
+	world := World{
+		XLen:  c.XLen,
+		YLen:  c.YLen,
+		Snake: c.BabySnake,
+		Food:  c.InitFood,
+	}
+	world.wall = c.WallGenerator(world)
+
+	return &Game{
+		World:  world,
+		isOver: false,
+	}
+}
+
 func (G *Game) IsOver() bool { return G.isOver }
 func (G *Game) WalkUp() {
-	G.Snake.Walk(G, Up)
-	if ok := G.CheckCollision(); !ok {
+	G.World.Snake.walk(&G.World, up)
+	if detected := G.World.detectCollision(); detected {
 		G.isOver = true
 	}
 }
 func (G *Game) WalkDown() {
-	G.Snake.Walk(G, Down)
-	if ok := G.CheckCollision(); !ok {
+	G.World.Snake.walk(&G.World, down)
+	if detected := G.World.detectCollision(); detected {
 		G.isOver = true
 	}
 }
 func (G *Game) WalkLeft() {
-	G.Snake.Walk(G, Left)
-	if ok := G.CheckCollision(); !ok {
+	G.World.Snake.walk(&G.World, left)
+	if detected := G.World.detectCollision(); detected {
 		G.isOver = true
 	}
 }
 func (G *Game) WalkRight() {
-	G.Snake.Walk(G, Right)
-	if ok := G.CheckCollision(); !ok {
+	G.World.Snake.walk(&G.World, right)
+	if detected := G.World.detectCollision(); detected {
 		G.isOver = true
 	}
 }
