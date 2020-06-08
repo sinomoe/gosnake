@@ -1,6 +1,7 @@
 package gosnake
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 )
@@ -34,6 +35,10 @@ func init() {
 
 type Coordinates struct {
 	x, y int
+}
+
+func (c Coordinates) String() string {
+	return fmt.Sprintf("(%d, %d)", c.x, c.y)
 }
 
 func (c Coordinates) Equal(co Coordinates) bool {
@@ -93,6 +98,7 @@ type Snake struct {
 	Bodies    Bodies
 	Len       int
 	Direction direction
+	score     int
 }
 
 func (s Snake) Head() Body {
@@ -140,6 +146,7 @@ func (s *Snake) walk(w *World, direction direction) {
 	s.appendHead(newHead)
 	if w.Food.Coordinates().Equal(newHead.Coordinates()) {
 		s.Len++ // eat food
+		s.score++
 		w.RefreshFood()
 		return
 	}
@@ -196,29 +203,8 @@ type Game struct {
 	isOver bool
 }
 
-type GameConfig struct {
-	XLen, YLen    int
-	BabySnake     Snake
-	InitFood      Food
-	WallGenerator WallGenerator
-}
-
-func GameInit(c GameConfig) *Game {
-	world := World{
-		XLen:  c.XLen,
-		YLen:  c.YLen,
-		Snake: c.BabySnake,
-		Food:  c.InitFood,
-	}
-	world.wall = c.WallGenerator(world)
-
-	return &Game{
-		World:  world,
-		isOver: false,
-	}
-}
-
-func (G *Game) IsOver() bool { return G.isOver }
+func (G Game) Score() int   { return G.World.Snake.score }
+func (G Game) IsOver() bool { return G.isOver }
 func (G *Game) WalkUp() {
 	G.World.Snake.walk(&G.World, up)
 	if detected := G.World.detectCollision(); detected {
@@ -241,5 +227,27 @@ func (G *Game) WalkRight() {
 	G.World.Snake.walk(&G.World, right)
 	if detected := G.World.detectCollision(); detected {
 		G.isOver = true
+	}
+}
+
+type GameConfig struct {
+	XLen, YLen    int
+	BabySnake     Snake
+	InitFood      Food
+	WallGenerator WallGenerator
+}
+
+func GameInit(c GameConfig) *Game {
+	world := World{
+		XLen:  c.XLen,
+		YLen:  c.YLen,
+		Snake: c.BabySnake,
+		Food:  c.InitFood,
+	}
+	world.wall = c.WallGenerator(world)
+
+	return &Game{
+		World:  world,
+		isOver: false,
 	}
 }

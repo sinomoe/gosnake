@@ -8,63 +8,113 @@ import (
 	"time"
 )
 
-func drawSnake(s gosnake.Snake) {
-	for _, v := range s.Bodies {
-		termbox.SetCell(v.X, v.Y, '●', termbox.ColorCyan, termbox.ColorBlack)
-	}
+type color termbox.Attribute
+
+const (
+	cyan      = color(termbox.ColorCyan)
+	black     = color(termbox.ColorBlack)
+	yellow    = color(termbox.ColorYellow)
+	white     = color(termbox.ColorWhite)
+	bold      = color(termbox.AttrBold)
+	whiteBold = color(termbox.ColorWhite) | bold
+)
+
+func drawCell(x, y int, fg, bg color, ch rune) {
+	termbox.SetCell(x, y, ch, termbox.Attribute(fg), termbox.Attribute(bg))
 }
 
-func drawFood(f gosnake.Food) {
-	termbox.SetCell(f.X, f.Y, '◉', termbox.ColorYellow, termbox.ColorBlack)
-}
-
-func drawWall(w gosnake.World) {
-	xOff := 0
-	yOff := 0
-	xLen := w.XLen
-	yLen := w.YLen
-	termbox.SetCell(xOff, yOff, '+', termbox.ColorWhite|termbox.AttrBold, termbox.ColorBlack)
-	termbox.SetCell(xOff+xLen, yOff, '+', termbox.ColorWhite|termbox.AttrBold, termbox.ColorBlack)
-	termbox.SetCell(xOff, yOff+yLen, '+', termbox.ColorWhite|termbox.AttrBold, termbox.ColorBlack)
-	termbox.SetCell(xOff+xLen, yOff+yLen, '+', termbox.ColorWhite|termbox.AttrBold, termbox.ColorBlack)
-	for i := 1; i < xLen; i++ {
-		termbox.SetCell(xOff+i, yOff, '-', termbox.ColorWhite|termbox.AttrBold, termbox.ColorBlack)
-		termbox.SetCell(xOff+i, yOff+yLen, '-', termbox.ColorWhite|termbox.AttrBold, termbox.ColorBlack)
-	}
-	for i := 1; i < yLen; i++ {
-		termbox.SetCell(xOff, yOff+i, '|', termbox.ColorWhite|termbox.AttrBold, termbox.ColorBlack)
-		termbox.SetCell(xOff+xLen, yOff+i, '|', termbox.ColorWhite|termbox.AttrBold, termbox.ColorBlack)
-	}
-}
-
-func updateAndDrawAll(G *gosnake.Game) {
-	termbox.Clear(termbox.ColorDefault, termbox.ColorDefault)
-	drawWall(G.World)
-	drawFood(G.World.Food)
-	drawSnake(G.World.Snake)
-	drawStatus(G)
-	termbox.Flush()
-}
-
-func tbprint(x, y int, fg, bg termbox.Attribute, msg string) {
+func tbprint(x, y int, fg, bg color, msg string) {
 	for _, c := range msg {
-		termbox.SetCell(x, y, c, fg, bg)
+		termbox.SetCell(x, y, c, termbox.Attribute(fg), termbox.Attribute(bg))
 		x += runewidth.RuneWidth(c)
 	}
 }
 
-func drawStatus(G *gosnake.Game) {
-	scoreMsg := fmt.Sprintf("Score: %d", G.World.Snake.Len-3)
-	tbprint(41, 0, termbox.ColorBlack, termbox.ColorWhite, scoreMsg)
+func clearScreen() {
+	if err := termbox.Clear(termbox.ColorDefault, termbox.ColorDefault); err != nil {
+		panic(err)
+	}
+}
+
+func render() {
+	if err := termbox.Flush(); err != nil {
+		panic(err)
+	}
+}
+
+type snake struct {
+	head, body rune
+}
+
+type wall struct {
+	corners                  [4]rune
+	top, bottom, left, right rune
+}
+
+type style struct {
+	snake snake
+	food  rune
+	wall  wall
+}
+
+type gameBox struct {
+	game       *gosnake.Game
+	xOff, yOff int
+	style      style
+}
+
+func (gb *gameBox) drawSnake() {
+	for _, v := range gb.game.World.Snake.Bodies {
+		drawCell(v.X, v.Y, cyan, black, gb.style.snake.body)
+	}
+}
+
+func (gb *gameBox) drawFood() {
+	f := gb.game.World.Food
+	drawCell(f.X, f.Y, yellow, black, gb.style.food)
+}
+
+func (gb *gameBox) drawWall() {
+	xOff := gb.xOff
+	yOff := gb.yOff
+	xLen := gb.game.World.XLen
+	yLen := gb.game.World.YLen
+	drawCell(xOff, yOff, whiteBold, black, gb.style.wall.corners[0])
+	drawCell(xOff+xLen, yOff, whiteBold, black, gb.style.wall.corners[1])
+	drawCell(xOff, yOff+yLen, whiteBold, black, gb.style.wall.corners[2])
+	drawCell(xOff+xLen, yOff+yLen, whiteBold, black, gb.style.wall.corners[3])
+	for i := 1; i < xLen; i++ {
+		drawCell(xOff+i, yOff, whiteBold, black, gb.style.wall.top)
+		drawCell(xOff+i, yOff+yLen, whiteBold, black, gb.style.wall.bottom)
+	}
+	for i := 1; i < yLen; i++ {
+		drawCell(xOff, yOff+i, whiteBold, black, gb.style.wall.left)
+		drawCell(xOff+xLen, yOff+i, whiteBold, black, gb.style.wall.right)
+	}
+}
+
+func (gb *gameBox) updateAndDrawAll() {
+	clearScreen()
+	gb.drawWall()
+	gb.drawFood()
+	gb.drawSnake()
+	gb.drawStatus()
+	render()
+}
+
+func (gb *gameBox) drawStatus() {
+	G := gb.game
+	scoreMsg := fmt.Sprintf("Score: %d", G.Score())
+	tbprint(41, 0, black, white, scoreMsg)
 	if G.IsOver() {
-		tbprint(41, 1, termbox.ColorBlack, termbox.ColorWhite, "game over")
+		tbprint(41, 1, black, white, "game over")
 	}
 	head := G.World.Snake.Head()
 	headMsg := fmt.Sprintf("Head: (%d, %d)", head.X, head.Y)
-	tbprint(41, 2, termbox.ColorBlack, termbox.ColorWhite, headMsg)
+	tbprint(41, 2, black, white, headMsg)
 	food := G.World.Food
 	foodMsg := fmt.Sprintf("Food: (%d, %d)", food.X, food.Y)
-	tbprint(41, 3, termbox.ColorBlack, termbox.ColorWhite, foodMsg)
+	tbprint(41, 3, black, white, foodMsg)
 }
 
 func main() {
@@ -78,13 +128,23 @@ func main() {
 		InitFood:      gosnake.Food{X: 22, Y: 16},
 		WallGenerator: gosnake.DefaultWallGenerator,
 	})
+	gb := &gameBox{
+		game: G,
+		xOff: 0,
+		yOff: 0,
+		style: style{
+			snake: snake{head: '●', body: '●'},
+			food:  '◉',
+			wall:  wall{corners: [4]rune{'+', '+', '+', '+'}, top: '-', bottom: '-', left: '|', right: '|'},
+		},
+	}
 	if err := termbox.Init(); err != nil {
 		panic(err)
 	}
 	defer termbox.Close()
 	termbox.SetInputMode(termbox.InputEsc)
 
-	updateAndDrawAll(G)
+	gb.updateAndDrawAll()
 
 	currentKey := termbox.KeyArrowRight
 
@@ -108,7 +168,7 @@ func main() {
 					G.WalkRight()
 				}
 			}
-			updateAndDrawAll(G)
+			gb.updateAndDrawAll()
 		}
 	}()
 

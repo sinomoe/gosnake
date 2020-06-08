@@ -75,6 +75,10 @@ func TestEatFood(t *testing.T) {
 		t.Errorf("step %d: snake Len should be %d", 4, G.World.Snake.Len+1)
 		return
 	}
+	if G.Score() == 0 {
+		t.Errorf("step %d: score should be %d", 4, 1)
+		return
+	}
 
 	// check new food target
 	if G.World.Food.X == initFoodX && G.World.Food.Y == initFoodY {
