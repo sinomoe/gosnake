@@ -15,7 +15,9 @@ func init() {
 	rand.Seed(time.Now().Unix())
 	DefaultWallGenerator = func(w World) Wall {
 		return func(c Coordinates) bool {
-			if c.x <= 0 || c.y <= 0 || c.x >= w.XLen || c.y >= w.YLen {
+			x := c.x
+			y := c.y
+			if x <= 0 || y <= 0 || x >= w.XLen || y >= w.YLen {
 				return true
 			}
 			return false
